@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Depth Map & Sketch Generator</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .container {
+            margin-top: 50px;
+        }
+        .preview-img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ddd;
+            margin-top: 10px;
+        }
+        .image-section {
+            display: flex;
+            justify-content: space-between;
+        }
+        .image-container {
+            width: 48%; /* Adjust width to have space between images */
+        }
+        #loading {
+            display: none;
+        }
+        .navbar-nav {
+            justify-content: center; /* Center the nav items */
+            width: 100%; /* Full width for justification */
+        }
+        .dropdown-menu {
+            min-width: 160px; /* Set a minimum width for dropdown */
+        }
+        #downloadButton {
+            pointer-events: none; /* Disable pointer events */
+            opacity: 0.5; /* Make it appear disabled */
+            transition: background-color 0.3s; /* Smooth transition for background color */
+            border: none; /* Remove border */
+        }
+        #downloadButton.enabled {
+            pointer-events: auto; /* Enable pointer events */
+            opacity: 1; /* Reset opacity */
+            background-color: green; /* Change background color to green */
+            color: white; /* Change text color to white */
+        }
+        .upload-container {
+            display: flex; /* Use flex to align elements */
+            align-items: center; /* Center vertically */
+        }
+        #fileName {
+            margin-left: 10px; /* Space between upload button and file name */
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">Image Processor</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item upload-container">
+                        <button class="btn nav-link" id="uploadButton" type="button">Upload</button>
+                        <span id="fileName" class="ms-2"></span> <!-- File name display -->
+                    </li>
+                    <li class="nav-item dropdown">
+                        <button class="btn nav-link dropdown-toggle" type="button" id="dropdownMenuButton" data-bs-toggle="dropdown" aria-expanded="false" style="min-width: 120px;">
+                            Select
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+                            <li><a class="dropdown-item" href="#" data-selection="depth_map">Depth Map</a></li>
+                            <li><a class="dropdown-item" href="#" data-selection="pencil_sketch">Pencil Sketch</a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item">
+                        <button class="btn nav-link" id="convertButton" type="button">Convert</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="btn nav-link" id="downloadButton" type="button" disabled>Download</button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <form id="uploadForm" enctype="multipart/form-data">
+            <div class="mb-3">
+                <input class="form-control" type="file" id="imageInput" name="image" required style="display: none;">
+            </div>
+        </form>
+
+        <div id="loading" class="text-center">
+            <p>Processing your image...</p>
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+
+        <div class="image-section mt-4">
+            <div class="image-container">
+                <h3 class="text-center">Before Image</h3>
+                <img id="originalImage" class="preview-img" alt="" />
+            </div>
+            <div class="image-container">
+                <h3 class="text-center">After Image</h3>
+                <img id="depthMapImage" class="preview-img" alt="" />
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS & Popper.js -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- JavaScript to handle file upload and form submission -->
+    <script>
+        let selectedOption = '';
+        let downloadUrl = ''; // Variable to store the download URL
+
+        // Display the uploaded image and file name
+        document.getElementById('imageInput').addEventListener('change', function () {
+            const file = this.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    document.getElementById('originalImage').src = e.target.result; // Set the src to the uploaded image
+                }
+                reader.readAsDataURL(file); // Read the image as a data URL
+
+                // Display the file name
+                document.getElementById('fileName').innerText = file.name; // Show file name with extension
+            }
+        });
+
+        document.querySelectorAll('.dropdown-item').forEach(item => {
+            item.addEventListener('click', function (e) {
+                e.preventDefault();
+                selectedOption = item.getAttribute('data-selection');
+                document.getElementById('dropdownMenuButton').innerText = item.innerText;
+            });
+        });
+
+        document.getElementById('uploadButton').addEventListener('click', function () {
+            document.getElementById('imageInput').click();
+        });
+
+        document.getElementById('convertButton').addEventListener('click', function () {
+            if (!selectedOption) {
+                alert("Please select an option (Depth Map or Pencil Sketch).");
+                return;
+            }
+
+            const formData = new FormData();
+            const fileInput = document.getElementById('imageInput').files[0];
+
+            if (!fileInput) {
+                alert("Please upload an image first.");
+                return;
+            }
+
+            formData.append('image', fileInput);
+            formData.append('option', selectedOption);  // Send the selected option
+
+            // Display loading indicator
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('depthMapImage').src = '';
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('depthMapImage').src = data.depth_map_url;
+                document.getElementById('downloadButton').disabled = false; // Enable the button
+                document.getElementById('downloadButton').classList.add('enabled'); // Update class for styling
+                
+                // Store the download URL for later use
+                downloadUrl = data.download_url; // Get the download URL from response
+            })
+            .catch(err => {
+                console.error("Error:", err);
+                alert("An error occurred while processing your image.");
+            });
+        });
+
+        document.getElementById('downloadButton').addEventListener('click', function () {
+            // Redirect to the download URL
+            window.location.href = downloadUrl; // Navigate to the download URL
+        });
+    </script>
+</body>
+</html>
